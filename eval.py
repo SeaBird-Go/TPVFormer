@@ -126,15 +126,19 @@ def main(local_rank, args):
     CalMeanIou_vox.reset()
 
     with torch.no_grad():
-        for i_iter_val, (imgs, img_metas, val_vox_label, val_grid, val_pt_labs) in enumerate(val_dataset_loader):
+        for i_iter_val, (imgs, img_metas, val_vox_label, val_grid, val_pt_labs, point_cloud) in enumerate(val_dataset_loader):
             
             imgs = imgs.cuda()
             val_grid_float = val_grid.to(torch.float32).cuda()
             val_grid_int = val_grid.to(torch.long).cuda()
             vox_label = val_vox_label.type(torch.LongTensor).cuda()
             val_pt_labs = val_pt_labs.cuda()
+            point_cloud = point_cloud.cuda()
 
-            predict_labels_vox, predict_labels_pts = my_model(img=imgs, img_metas=img_metas, points=val_grid_float)
+            predict_labels_vox, predict_labels_pts = my_model(
+                img=imgs, img_metas=img_metas, 
+                points=val_grid_float,
+                point_cloud=point_cloud)
             if cfg.lovasz_input == 'voxel':
                 lovasz_input = predict_labels_vox
                 lovasz_label = vox_label

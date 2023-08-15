@@ -82,6 +82,7 @@ class TPVFormer(BaseModule):
                 img_metas=None,
                 img=None,
                 use_grid_mask=None,
+                **kwargs
         ):
         """Forward training function.
         """

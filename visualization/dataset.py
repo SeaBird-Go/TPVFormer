@@ -91,6 +91,8 @@ class ImagePoint_NuScenes_vis(data.Dataset):
                     insert_items.append(temp_dict)
                 nusc_infos.extend(insert_items)
         
+        ## NOTE: sort by timestamp to make the order is the same with BEVDet
+        nusc_infos = list(sorted(nusc_infos, key=lambda e: e['timestamp']))
         self.nusc_infos = nusc_infos
         
         self.data_path = data_path
@@ -117,8 +119,13 @@ class ImagePoint_NuScenes_vis(data.Dataset):
                 imread(filename, 'unchanged').astype(np.float32)
             )
         
-        lidar_sd_token = self.nusc.get('sample', info['token'])['data']['LIDAR_TOP']
-        lidarseg_labels_filename = os.path.join(self.lidarseg_path, self.nusc.get('lidarseg', lidar_sd_token)['filename'])
+        if self.nusc is None:
+            assert "lidarseg" in info.keys(), "lidarseg not in info.keys()"
+            lidarseg_labels_filename = info['lidarseg']
+        else:
+            lidar_sd_token = self.nusc.get('sample', info['token'])['data']['LIDAR_TOP']
+            lidarseg_labels_filename = os.path.join(self.lidarseg_path, self.nusc.get('lidarseg', lidar_sd_token)['filename'])
+        
         points_label = np.fromfile(lidarseg_labels_filename, dtype=np.uint8).reshape([-1, 1])
         points_label = np.vectorize(self.learning_map.__getitem__)(points_label)
         
@@ -128,8 +135,12 @@ class ImagePoint_NuScenes_vis(data.Dataset):
         data_tuple = (imgs, img_metas, points[:, :3], points_label.astype(np.uint8))
 
         # deal with scene
-        scene_token = self.nusc.get('sample', info['token'])['scene_token']
-        scene_meta = self.nusc.get('scene', scene_token)
+        if self.nusc is None:
+            scene_meta = None  # TODO: add scene info
+        else:
+            scene_token = self.nusc.get('sample', info['token'])['scene_token']
+            scene_meta = self.nusc.get('scene', scene_token)
+        
         timestamp = info['timestamp']
         return data_tuple, imgs_info['img_filename'], scene_meta, timestamp
     

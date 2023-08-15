@@ -41,7 +41,7 @@ def main(local_rank, args):
     # init DDP
     distributed = True
     ip = os.environ.get("MASTER_ADDR", "127.0.0.1")
-    port = os.environ.get("MASTER_PORT", "20508")
+    port = os.environ.get("MASTER_PORT", "20505")
     hosts = int(os.environ.get("WORLD_SIZE", 1))  # number of nodes
     rank = int(os.environ.get("RANK", 0))  # node id
     gpus = torch.cuda.device_count()  # gpus per node
@@ -183,6 +183,8 @@ def main(local_rank, args):
                 voxel_label = train_vox_label.type(torch.LongTensor).cuda()
             if cfg.lovasz_input == 'points' or cfg.ce_input == 'points':
                 train_pt_labs = train_pt_labs.cuda()
+            
+            point_cloud = point_cloud.cuda()
             # forward + backward + optimize
             data_time_e = time.time()
             outputs_vox, outputs_pts = my_model(
@@ -253,7 +255,7 @@ def main(local_rank, args):
         CalMeanIou_vox.reset()
 
         with torch.no_grad():
-            for i_iter_val, (imgs, img_metas, val_vox_label, val_grid, val_pt_labs) in enumerate(val_dataset_loader):
+            for i_iter_val, (imgs, img_metas, val_vox_label, val_grid, val_pt_labs, point_cloud) in enumerate(val_dataset_loader):
                 
                 imgs = imgs.cuda()
                 val_grid_float = val_grid.to(torch.float32).cuda()
@@ -261,7 +263,13 @@ def main(local_rank, args):
                 vox_label = val_vox_label.cuda()
                 val_pt_labs = val_pt_labs.cuda()
 
-                predict_labels_vox, predict_labels_pts = my_model(img=imgs, img_metas=img_metas, points=val_grid_float)
+                point_cloud = point_cloud.cuda()
+
+                predict_labels_vox, predict_labels_pts = my_model(
+                    img=imgs, 
+                    img_metas=img_metas, 
+                    points=val_grid_float,
+                    point_cloud=point_cloud)
                 if cfg.lovasz_input == 'voxel':
                     lovasz_input = predict_labels_vox
                     lovasz_label = vox_label
