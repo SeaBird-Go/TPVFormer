@@ -33,7 +33,8 @@ test_pipeline = [
 class ImagePoint_NuScenes_vis(data.Dataset):
     def __init__(self, data_path, imageset='train', 
                  scene_idx=None, scene_name=None,
-                 label_mapping="nuscenes.yaml", nusc=None):
+                 label_mapping="nuscenes.yaml", nusc=None,
+                 use_cam_sweeps=False):
         self.return_ref = False
 
         with open(imageset, 'rb') as f:
@@ -52,47 +53,49 @@ class ImagePoint_NuScenes_vis(data.Dataset):
             self.nusc_infos = nusc_infos[scene_name]
             nusc_infos = deepcopy(self.nusc_infos)
 
-            sweep_cams = []
-            sweep_tss = []
-            reverse_tab = {
-                'CAM_FRONT':0, 
-                'CAM_FRONT_RIGHT':1, 
-                'CAM_FRONT_LEFT':2, 
-                'CAM_BACK':3, 
-                'CAM_BACK_LEFT':4, 
-                'CAM_BACK_RIGHT':5
-            }
-            for cam_type in ['CAM_FRONT', 'CAM_FRONT_RIGHT', 'CAM_FRONT_LEFT', 'CAM_BACK', 'CAM_BACK_LEFT', 'CAM_BACK_RIGHT']:
-                dir = os.path.join(data_path, 'sweeps', cam_type)
-                filenames = os.listdir(dir)
-                files = [os.path.join(dir, fn) for fn in filenames]
-                ts = [int(fn.split('__')[-1].split('.')[0]) for fn in filenames]
-                idx = np.argsort(ts)
-                sweep_cams.append(np.array(files)[idx])
-                sweep_tss.append(np.array(ts)[idx])
-            sweep_cams = np.array(sweep_cams)
-            sweep_tss = np.array(sweep_tss)
+            if use_cam_sweeps:
+                sweep_cams = []
+                sweep_tss = []
+                reverse_tab = {
+                    'CAM_FRONT':0, 
+                    'CAM_FRONT_RIGHT':1, 
+                    'CAM_FRONT_LEFT':2, 
+                    'CAM_BACK':3, 
+                    'CAM_BACK_LEFT':4, 
+                    'CAM_BACK_RIGHT':5
+                }
+                for cam_type in ['CAM_FRONT', 'CAM_FRONT_RIGHT', 'CAM_FRONT_LEFT', 'CAM_BACK', 'CAM_BACK_LEFT', 'CAM_BACK_RIGHT']:
+                    dir = os.path.join(data_path, 'sweeps', cam_type)
+                    filenames = os.listdir(dir)
+                    files = [os.path.join(dir, fn) for fn in filenames]
+                    ts = [int(fn.split('__')[-1].split('.')[0]) for fn in filenames]
+                    idx = np.argsort(ts)
+                    sweep_cams.append(np.array(files)[idx])
+                    sweep_tss.append(np.array(ts)[idx])
+                sweep_cams = np.array(sweep_cams)
+                sweep_tss = np.array(sweep_tss)
 
-            for i in range(len(self.nusc_infos)-1):
-                insert_items = []
-                start_ts = self.nusc_infos[i]['timestamp']
-                end_ts = self.nusc_infos[i+1]['timestamp']
-                temp_cams = []
-                for sweep_cam, sweep_ts in zip(sweep_cams, sweep_tss):
-                    temp_cam = sweep_cam[[(ts < end_ts and ts > start_ts) for ts in sweep_ts]]
-                    temp_cams.append(temp_cam.tolist())
-                min_len = min([len(temp_cam) for temp_cam in temp_cams])
-                temp_cams = [temp_cam[:min_len] for temp_cam in temp_cams]
-                for j in range(min_len):
-                    temp_dict = deepcopy(self.nusc_infos[i])
-                    for cam_type, cam_info in temp_dict['cams'].items():
-                        cam_info['data_path'] = temp_cams[reverse_tab[cam_type]][j]
-                    temp_dict['timestamp'] = temp_cams[0][j].split('__')[-1].split('.')[0]
-                    insert_items.append(temp_dict)
-                nusc_infos.extend(insert_items)
+                for i in range(len(self.nusc_infos)-1):
+                    insert_items = []
+                    start_ts = self.nusc_infos[i]['timestamp']
+                    end_ts = self.nusc_infos[i+1]['timestamp']
+                    temp_cams = []
+                    for sweep_cam, sweep_ts in zip(sweep_cams, sweep_tss):
+                        temp_cam = sweep_cam[[(ts < end_ts and ts > start_ts) for ts in sweep_ts]]
+                        temp_cams.append(temp_cam.tolist())
+                    min_len = min([len(temp_cam) for temp_cam in temp_cams])
+                    temp_cams = [temp_cam[:min_len] for temp_cam in temp_cams]
+                    for j in range(min_len):
+                        temp_dict = deepcopy(self.nusc_infos[i])
+                        for cam_type, cam_info in temp_dict['cams'].items():
+                            cam_info['data_path'] = temp_cams[reverse_tab[cam_type]][j]
+                        temp_dict['timestamp'] = temp_cams[0][j].split('__')[-1].split('.')[0]
+                        insert_items.append(temp_dict)
+                    nusc_infos.extend(insert_items)
+        else:
+            # NOTE: sort by timestamp to make the order is the same with BEVDet
+            nusc_infos = list(sorted(nusc_infos, key=lambda e: e['timestamp']))
         
-        ## NOTE: sort by timestamp to make the order is the same with BEVDet
-        nusc_infos = list(sorted(nusc_infos, key=lambda e: e['timestamp']))
         self.nusc_infos = nusc_infos
         
         self.data_path = data_path
@@ -110,7 +113,8 @@ class ImagePoint_NuScenes_vis(data.Dataset):
         img_metas = {
             'lidar2img': imgs_info['lidar2img'],
             'cam_positions': imgs_info['cam_positions'],
-            'focal_positions': imgs_info['focal_positions']
+            'focal_positions': imgs_info['focal_positions'],
+            'sample_token': imgs_info['sample_idx']
         }
         # read 6 cams
         imgs = []
@@ -136,7 +140,7 @@ class ImagePoint_NuScenes_vis(data.Dataset):
 
         # deal with scene
         if self.nusc is None:
-            scene_meta = None  # TODO: add scene info
+            scene_meta = {"name" : "scene-0916"}  # TODO: add scene info
         else:
             scene_token = self.nusc.get('sample', info['token'])['scene_token']
             scene_meta = self.nusc.get('scene', scene_token)

@@ -27,6 +27,7 @@ class ImagePoint_NuScenes(data.Dataset):
         imgs_info = self.get_data_info(info)
         img_metas = {
             'lidar2img': imgs_info['lidar2img'],
+            'sample_token': imgs_info['sample_idx']
         }
         # read 6 cams
         imgs = []

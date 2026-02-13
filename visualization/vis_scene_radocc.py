@@ -1,4 +1,13 @@
+'''
+Copyright (c) 2023 by Haiming Zhang. All Rights Reserved.
 
+Author: Haiming Zhang
+Date: 2023-08-18 09:47:31
+Email: haimingzhang@link.cuhk.edu.cn
+Description: Read our rad occ results and visualize them.
+'''
+
+import os.path as osp
 import argparse, torch, os, json
 import shutil
 import numpy as np
@@ -214,21 +223,6 @@ if __name__ == "__main__":
     cfg = Config.fromfile(args.py_config)
     dataset_config = cfg.dataset_params
 
-    # prepare model
-    logger = mmcv.utils.get_logger('mmcv')
-    logger.setLevel("WARNING")
-    if cfg.get('occupancy', False):
-        from builder import tpv_occupancy_builder as model_builder
-    else:
-        from builder import tpv_lidarseg_builder as model_builder
-    my_model = model_builder.build(cfg.model).to(device)
-    if args.ckpt_path:
-        ckpt = torch.load(args.ckpt_path, map_location='cpu')
-        if 'state_dict' in ckpt:
-            ckpt = ckpt['state_dict']
-        print(my_model.load_state_dict(revise_ckpt(ckpt)))
-    my_model.eval()
-
     # prepare data
     from nuscenes import NuScenes
     from visualization.dataset import ImagePoint_NuScenes_vis, DatasetWrapper_NuScenes_vis
@@ -255,7 +249,8 @@ if __name__ == "__main__":
     # render scenes one by one
     for idx in range(num_scenes):
         pt_dataset = ImagePoint_NuScenes_vis(
-            data_path, imageset=pkl_path, scene_idx=scene_idxs[idx], scene_name=scene_names[idx],
+            data_path, imageset=pkl_path, 
+            scene_idx=scene_idxs[idx], scene_name=scene_names[idx],
             label_mapping=label_mapping, nusc=None)
 
         dataset = DatasetWrapper_NuScenes_vis(
@@ -275,23 +270,35 @@ if __name__ == "__main__":
             imgs, img_metas, vox_label, grid, pt_label = batch_data
             imgs = torch.from_numpy(np.stack([imgs]).astype(np.float32)).to(device)
             grid = torch.from_numpy(np.stack([grid]).astype(np.float32))#.to(device)
-            with torch.no_grad():
-                outputs_vox = my_model(img=imgs, img_metas=[img_metas])
-            
-                predict_vox = torch.argmax(outputs_vox, dim=1) # bs, w, h, z
-                predict_vox = predict_vox.squeeze(0).cpu().numpy() # w, h, z
+
+            ## read the results from ours
+            baseline_results_dir = "occ_submission_baseline"
+            radocc_results_dir = "occ_submission_RadOCC"
+
+            sample_token = img_metas['sample_token']
+            print(sample_token, imgs.shape, grid.shape)
+
+            ## load the occupancy
+            occ_pred_path = osp.join(radocc_results_dir, f"{sample_token}.npz")
+            occ_pred = np.load(occ_pred_path)['arr_0'].astype(np.int32)
+            print(occ_pred.shape, np.unique(occ_pred), occ_pred.dtype)
+
+            predict_vox = occ_pred
 
             voxel_origin = dataset_config['min_volume_space']
             voxel_max = dataset_config['max_volume_space']
             grid_size = cfg.grid_size
             resolution = [(e - s) / l for e, s, l in zip(voxel_max, voxel_origin, grid_size)]
 
-            scene_name = scene_meta['name']
-            scene_dir = os.path.join(args.save_path, scene_name)
+            print(voxel_origin, voxel_max, grid_size, resolution)
+            print(predict_vox.shape, predict_vox.min(), predict_vox.max())
+
+            # scene_name = scene_meta['name']
+            scene_dir = os.path.join(args.save_path, args.scene_name[idx])
             os.makedirs(scene_dir, exist_ok=True)
-            if not os.path.exists(os.path.join(scene_dir, 'meta.json')):
-                with open(os.path.join(scene_dir, 'meta.json'), 'w') as fp:
-                    json.dump(scene_meta, fp)
+            # if not os.path.exists(os.path.join(scene_dir, 'meta.json')):
+            #     with open(os.path.join(scene_dir, 'meta.json'), 'w') as fp:
+            #         json.dump(scene_meta, fp)
             
             clip_dirs = []
             for video_clip in range(8):

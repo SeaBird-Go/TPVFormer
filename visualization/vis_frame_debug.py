@@ -1,20 +1,9 @@
-
-from mayavi import mlab
-import mayavi
-# mlab.options.offscreen = True
-print("Set mlab.options.offscreen={}".format(mlab.options.offscreen))
-
 import argparse, torch, os, json
 import shutil
 import numpy as np
-import os.path as osp
 import mmcv
 from mmcv import Config
 from collections import OrderedDict
-
-# from pyvirtualdisplay import Display
-# display = Display(visible=False, size=(2560, 1440))
-# display.start()
 
 
 def revise_ckpt(state_dict):
@@ -182,13 +171,8 @@ def draw(
     # scene.camera.clipping_range = [0.01, 400.]
     # scene.camera.compute_view_plane_normal()
     # scene.render()
-    mlab.show()
-
-    # file_name_map = {0: 'occ', 
-    #                  1: 'lidarseg_pred',
-    #                  2: 'lidarseg_gt'}
-    # save_path = osp.join(save_dirs, f"{file_name_map[mode]}.png")
-    # mlab.savefig(save_path, figure=figure)
+    # mlab.show()
+    mlab.savefig('test.png', figure=figure)
 
 
 if __name__ == "__main__":
@@ -233,15 +217,14 @@ if __name__ == "__main__":
     from visualization.dataset import ImagePoint_NuScenes_vis, DatasetWrapper_NuScenes_vis
 
     if args.vis_train:
-        pkl_path = 'data/nuscenes_lidarseg_infos_train.pkl'
+        pkl_path = 'data/nuscenes_infos_train.pkl'
     else:
-        pkl_path = 'data/nuscenes_lidarseg_infos_val.pkl'
+        pkl_path = 'data/nuscenes_infos_val.pkl'
     
     data_path = 'data/nuscenes'
     label_mapping = dataset_config['label_mapping']
 
-    # nusc = NuScenes(version='v1.0-trainval', dataroot=data_path, verbose=True)
-    nusc = None
+    nusc = NuScenes(version='v1.0-trainval', dataroot=data_path, verbose=True)
         
     pt_dataset = ImagePoint_NuScenes_vis(
         data_path, imageset=pkl_path,
@@ -283,15 +266,3 @@ if __name__ == "__main__":
         
         for filename in filelist:            
             shutil.copy(filename, os.path.join(frame_dir, os.path.basename(filename)))
-
-        draw(predict_vox, 
-             predict_pts,
-             voxel_origin, 
-             resolution, 
-             grid.squeeze(0).cpu().numpy(), 
-             pt_label.squeeze(-1),
-             frame_dir,
-             img_metas['cam_positions'],
-             img_metas['focal_positions'],
-             timestamp=timestamp,
-             mode=args.mode)

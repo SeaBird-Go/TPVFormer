@@ -162,6 +162,16 @@ def main(local_rank, args):
             predict_labels_pts = torch.argmax(predict_labels_pts, dim=1) # bs, n
             predict_labels_pts = predict_labels_pts.detach().cpu()
             val_pt_labs = val_pt_labs.squeeze(-1).cpu()
+
+            print(predict_labels_pts.shape, val_pt_labs.shape)  # (bs, N), bs=1
+            sample_token = img_metas[0]['sample_token']  # NOTE: we assume the batch size is 1
+
+            ## save the predictions
+            save_dir = "./tpvformer_lidarseg_validation"
+            os.makedirs(save_dir, exist_ok=True)
+
+            full_save_path = os.path.join(save_dir, f"{sample_token}.npy")
+            np.save(full_save_path, predict_labels_pts[0])
             
             predict_labels_vox = torch.argmax(predict_labels_vox, dim=1)
             predict_labels_vox = predict_labels_vox.detach().cpu()
